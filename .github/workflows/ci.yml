@@ -1,0 +1,91 @@
+# Lint, unit and wire tests, live tests against SeaweedFS, and an MSI smoke build on every push
+# to main and every pull request.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+  CARGO_INCREMENTAL: 0
+  SEAWEEDFS_VERSION: "3.97"
+
+jobs:
+  test:
+    name: Lint, test, package (Windows)
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: pwsh
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Rust toolchain
+        run: |
+          rustup toolchain install stable --profile minimal --component rustfmt,clippy
+          rustup default stable
+          rustc --version
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Format
+        run: cargo fmt --all --check
+
+      - name: Clippy
+        run: cargo clippy --workspace --all-targets --locked -- -D warnings
+
+      - name: Unit and wire tests
+        run: cargo test --workspace --locked
+
+      # Docker on Windows runners cannot run the Linux image from dev/docker-compose.yml, so the
+      # live tests use SeaweedFS's Windows build with the same settings and test keys.
+      - name: Start SeaweedFS
+        run: |
+          $dir = Join-Path $env:RUNNER_TEMP 'seaweedfs'
+          New-Item -ItemType Directory -Force $dir, "$dir\data" | Out-Null
+          $url = "https://github.com/seaweedfs/seaweedfs/releases/download/$env:SEAWEEDFS_VERSION/windows_amd64.zip"
+          Invoke-WebRequest $url -OutFile "$dir\weed.zip"
+          Invoke-WebRequest "$url.md5" -OutFile "$dir\weed.zip.md5"
+          $expected = ((Get-Content "$dir\weed.zip.md5" -Raw).Trim() -split '\s+')[0].ToLowerInvariant()
+          $actual = (Get-FileHash "$dir\weed.zip" -Algorithm MD5).Hash.ToLowerInvariant()
+          if ($expected -ne $actual) { throw "SeaweedFS download corrupt (md5 $actual, expected $expected)" }
+          Expand-Archive "$dir\weed.zip" "$dir\bin" -Force
+          $weed = (Get-ChildItem "$dir\bin" -Recurse -Filter weed.exe | Select-Object -First 1).FullName
+          $config = Join-Path $env:GITHUB_WORKSPACE 'dev\seaweedfs-s3.json'
+          Start-Process $weed -ArgumentList @('server', "-dir=$dir\data", '-ip=127.0.0.1', '-s3',
+              '-s3.port=59000', "-s3.config=$config", '-volume.max=0', '-master.volumeSizeLimitMB=64') `
+              -RedirectStandardOutput "$dir\weed.out.log" -RedirectStandardError "$dir\weed.err.log"
+          for ($i = 0; $i -lt 60; $i++) {
+            try { (New-Object Net.Sockets.TcpClient('127.0.0.1', 59000)).Close(); Write-Host 'SeaweedFS is up'; exit 0 } catch { Start-Sleep 1 }
+          }
+          Get-Content "$dir\weed.err.log" -Tail 50
+          throw 'SeaweedFS did not start'
+
+      - name: Live tests
+        env:
+          S3M_IT: "1"
+        run: cargo test -p s3m-s3 --test live --locked
+
+      - name: SeaweedFS log
+        if: failure()
+        run: Get-Content (Join-Path $env:RUNNER_TEMP 'seaweedfs\weed.err.log') -Tail 200 -ErrorAction SilentlyContinue
+
+      - name: Build MSI (unsigned, no auto-update)
+        run: |
+          dotnet tool restore
+          ./scripts/release.ps1 -SkipTests
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: prometheus-s3manager-${{ github.sha }}
+          path: dist/
+          retention-days: 14

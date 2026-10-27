@@ -1,0 +1,84 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Per-user MSI for Prometheus S3Manager (WiX 5).
+
+  Installs to %LOCALAPPDATA%\Programs\Prometheus S3Manager without administrator rights, so the
+  in-app updater can run it with msiexec /passive. Every version is a major upgrade of the last
+  one (same UpgradeCode); downgrades are refused. User data in %APPDATA%\Prometheus-S3Manager and
+  the secrets in the Windows Credential Manager are never touched, also not on uninstall.
+
+  Built by scripts/release.ps1:
+    dotnet tool run wix build installer/Prometheus.wxs -arch x64
+      -ext WixToolset.UI.wixext -d LicenseRtf=<License.rtf>
+      -d Version=x.y.z -d ExePath=<s3manager.exe> -d IconPath=apps/prometheus/assets/app.ico
+      -o dist/Prometheus-S3Manager-x.y.z-x64.msi
+-->
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs"
+     xmlns:ui="http://wixtoolset.org/schemas/v4/wxs/ui">
+  <Package Name="Prometheus S3Manager"
+           Manufacturer="Enrique Muhammad Ilham"
+           Version="$(Version)"
+           UpgradeCode="B7CFA72F-6D9C-4133-B692-3F8B1F468AE3"
+           Scope="perUser"
+           Compressed="yes"
+           Language="1033">
+    <SummaryInformation Description="Prometheus S3Manager $(Version) installer" />
+
+    <!-- AllowSameVersionUpgrades: a rebuild of the same version replaces the installed copy
+         instead of being installed next to it. -->
+    <MajorUpgrade AllowSameVersionUpgrades="yes" DowngradeErrorMessage="A newer version of Prometheus S3Manager is already installed." />
+    <MediaTemplate EmbedCab="yes" CompressionLevel="high" />
+
+    <Icon Id="AppIcon" SourceFile="$(IconPath)" />
+    <Property Id="ARPPRODUCTICON" Value="AppIcon" />
+    <Property Id="ARPNOREPAIR" Value="1" />
+
+    <StandardDirectory Id="LocalAppDataFolder">
+      <Directory Id="ProgramsFolder" Name="Programs">
+        <Directory Id="INSTALLFOLDER" Name="Prometheus S3Manager" />
+      </Directory>
+    </StandardDirectory>
+    <StandardDirectory Id="ProgramMenuFolder" />
+
+    <!-- Per-user components use an HKCU value as key path (ICE38) and remove their folders (ICE64). -->
+    <Component Id="MainExecutable" Directory="INSTALLFOLDER" Guid="71E5A2E4-FD35-4046-8FEF-855D071325A7">
+      <File Id="S3ManagerExe" Name="s3manager.exe" Source="$(ExePath)" KeyPath="no" />
+      <RegistryValue Root="HKCU" Key="Software\Prometheus S3Manager" Name="InstallDir"
+                     Type="string" Value="[INSTALLFOLDER]" KeyPath="yes" />
+      <RegistryValue Root="HKCU" Key="Software\Prometheus S3Manager" Name="Version"
+                     Type="string" Value="$(Version)" />
+      <RemoveFolder Id="RemoveInstallFolder" Directory="INSTALLFOLDER" On="uninstall" />
+      <RemoveFolder Id="RemoveProgramsFolder" Directory="ProgramsFolder" On="uninstall" />
+    </Component>
+
+    <Component Id="StartMenuShortcut" Directory="ProgramMenuFolder">
+      <Shortcut Id="StartMenuEntry" Name="Prometheus S3Manager"
+                Description="Multi-account file manager for Amazon S3 and S3-compatible storage"
+                Target="[INSTALLFOLDER]s3manager.exe" WorkingDirectory="INSTALLFOLDER" Icon="AppIcon" />
+      <RegistryValue Root="HKCU" Key="Software\Prometheus S3Manager" Name="StartMenuShortcut"
+                     Type="integer" Value="1" KeyPath="yes" />
+    </Component>
+
+    <!-- Installer dialogs: welcome with the license, progress, and a finish page that offers to
+         start the app (Repair / Remove when this version is already installed). Silent and
+         /passive runs (deployment, the in-app updater) show no dialogs and do not launch it. -->
+    <WixVariable Id="WixUILicenseRtf" Value="$(LicenseRtf)" />
+    <!-- Pictures in the app's colors (scripts/make-installer-art.py) instead of the WiX defaults. -->
+    <WixVariable Id="WixUIDialogBmp" Value="$(sys.SOURCEFILEDIR)dialog.bmp" />
+    <WixVariable Id="WixUIBannerBmp" Value="$(sys.SOURCEFILEDIR)banner.bmp" />
+    <SetProperty Id="WIXUI_EXITDIALOGOPTIONALCHECKBOXTEXT" Value="Launch Prometheus S3Manager"
+                 Before="CostFinalize" Sequence="ui" Condition="NOT Installed" />
+    <Property Id="WIXUI_EXITDIALOGOPTIONALCHECKBOX" Value="1" />
+    <ui:WixUI Id="WixUI_Minimal" />
+    <UI>
+      <Publish Dialog="ExitDialog" Control="Finish" Event="DoAction" Value="LaunchApplication"
+               Condition="WIXUI_EXITDIALOGOPTIONALCHECKBOX = 1 AND NOT Installed" />
+    </UI>
+    <CustomAction Id="LaunchApplication" FileRef="S3ManagerExe" ExeCommand="" Return="asyncNoWait" />
+
+    <Feature Id="Main" Title="Prometheus S3Manager">
+      <ComponentRef Id="MainExecutable" />
+      <ComponentRef Id="StartMenuShortcut" />
+    </Feature>
+  </Package>
+</Wix>

@@ -1,0 +1,27 @@
+# Local S3-compatible storage (SeaweedFS) for development and the live test suite:
+#   docker compose -f dev/docker-compose.yml up -d
+#   S3M_IT=1 cargo test -p s3m-s3 --test live
+# Endpoint 127.0.0.1:59000 (plain HTTP, private address); keys in seaweedfs-s3.json
+# (access key s3m-test, secret s3m-test-secret).
+services:
+  s3:
+    image: chrislusf/seaweedfs:3.97
+    command: server -dir=/data -s3 -s3.port=8333 -s3.config=/etc/seaweedfs/s3.json -volume.max=0 -master.volumeSizeLimitMB=64
+    volumes:
+      - ./seaweedfs-s3.json:/etc/seaweedfs/s3.json:ro
+    ports:
+      - "127.0.0.1:59000:8333"
+
+  # MinIO for the access key (admin API) tests, started on demand:
+  #   docker compose -f dev/docker-compose.yml --profile minio up -d minio
+  #   S3M_IT=1 S3M_MINIO=1 cargo test -p s3m-s3 --test access_keys_live
+  # Endpoint 127.0.0.1:59100, root user s3m-test / s3m-test-secret.
+  minio:
+    # MinIO no longer publishes server images; this is Bitnami's build of RELEASE.2025-04-22.
+    image: bitnamilegacy/minio:2025.4.22
+    profiles: ["minio"]
+    environment:
+      MINIO_ROOT_USER: s3m-test
+      MINIO_ROOT_PASSWORD: s3m-test-secret
+    ports:
+      - "127.0.0.1:59100:9000"

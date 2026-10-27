@@ -1,0 +1,9 @@
+{
+  "identities": [
+    {
+      "name": "s3m-test",
+      "credentials": [{ "accessKey": "s3m-test", "secretKey": "s3m-test-secret" }],
+      "actions": ["Admin", "Read", "Write", "List", "Tagging"]
+    }
+  ]
+}

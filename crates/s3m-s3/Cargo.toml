@@ -1,0 +1,39 @@
+[package]
+name = "s3m-s3"
+description = "S3 access for Prometheus S3Manager: guarded HTTP client, storage service, transfer executor."
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+s3m-core.workspace = true
+aws-sdk-s3.workspace = true
+aws-smithy-http-client.workspace = true
+aws-smithy-runtime-api.workspace = true
+aws-smithy-types.workspace = true
+aws-smithy-async.workspace = true
+aws-credential-types.workspace = true
+tokio.workspace = true
+tokio-util.workspace = true
+bytes.workspace = true
+http-body.workspace = true
+futures-util.workspace = true
+thiserror.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+uuid.workspace = true
+chrono.workspace = true
+tracing.workspace = true
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["test-util"] }
+http-body-util.workspace = true
+
+[target.'cfg(windows)'.dependencies]
+winreg = "0.56"
+
+[lints]
+workspace = true

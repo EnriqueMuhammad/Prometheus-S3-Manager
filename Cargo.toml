@@ -1,0 +1,101 @@
+[workspace]
+resolver = "3"
+members = [
+    "apps/prometheus",
+    "crates/s3m-core",
+    "crates/s3m-storage",
+    "crates/s3m-s3",
+    "crates/s3m-ui",
+    "crates/s3m-update",
+]
+
+[workspace.package]
+version = "0.1.0"
+authors = ["Enrique Muhammad Ilham"]
+edition = "2024"
+rust-version = "1.95"
+license = "PolyForm-Noncommercial-1.0.0"
+publish = false
+
+[workspace.dependencies]
+# Internal crates
+s3m-core = { path = "crates/s3m-core" }
+s3m-storage = { path = "crates/s3m-storage" }
+s3m-s3 = { path = "crates/s3m-s3" }
+s3m-ui = { path = "crates/s3m-ui" }
+s3m-update = { path = "crates/s3m-update" }
+
+# GUI
+eframe = { version = "0.36", default-features = false, features = [
+    "default_fonts",
+    "glow",
+    "persistence",
+    "accesskit",
+    "links",
+    "wayland",
+    "x11",
+] }
+egui = { version = "0.36", features = ["serde"] }
+egui_extras = { version = "0.36", features = ["image"] }
+image = { version = "0.25", default-features = false, features = ["png", "jpeg", "gif", "bmp", "webp", "ico"] }
+egui-phosphor = "0.14"
+rfd = "0.17"
+
+# Runtime / plumbing
+tokio = { version = "1.53", features = ["rt-multi-thread", "sync", "time", "macros", "fs", "io-util"] }
+tokio-util = "0.7"
+bytes = "1"
+http-body = "1"
+http-body-util = "0.1"
+futures-util = { version = "0.3", default-features = false, features = ["std"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+ron = "0.12"
+thiserror = "2"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+directories = "6"
+uuid = { version = "1", features = ["v4", "serde"] }
+chrono = { version = "0.4", default-features = false, features = ["std", "clock", "serde"] }
+rusqlite = { version = "0.40", features = ["bundled"] }
+keyring = "4"
+regex = "1"
+semver = "1"
+walkdir = "2"
+fastrand = "2"
+winresource = "0.1"
+
+# Crypto (export format) and certificate parsing
+ring = "0.17"
+# Key derivation of MinIO admin API payloads
+argon2 = { version = "0.6", default-features = false, features = ["alloc"] }
+base64 = "0.22"
+unicode-normalization = "0.1"
+x509-parser = "0.18"
+
+# S3: official SDK on our own hyper/rustls client (custom CA + private-network DNS guard)
+aws-sdk-s3 = { version = "1.152", default-features = false, features = ["http-1x", "rt-tokio", "behavior-version-latest"] }
+aws-smithy-http-client = { version = "1.5", features = ["rustls-ring"] }
+aws-smithy-runtime-api = { version = "1.19", features = ["client", "http-1x"] }
+aws-smithy-types = { version = "1.8", features = ["rt-tokio", "http-body-1-x"] }
+aws-smithy-async = { version = "1", features = ["rt-tokio"] }
+aws-credential-types = "1.3"
+# Update checks (GitHub Releases) over rustls/ring with the Windows certificate store
+reqwest = { version = "0.12", default-features = false, features = ["rustls-tls-native-roots", "http2"] }
+
+[profile.release]
+lto = "thin"
+codegen-units = 1
+strip = true
+
+[workspace.lints.rust]
+unsafe_code = "forbid"
+missing_docs = "warn"
+
+[workspace.lints.clippy]
+unwrap_used = "warn"
+expect_used = "warn"
+
+[profile.dev.package."*"]
+# Dependencies are optimised even in debug builds so the UI stays responsive.
+opt-level = 2

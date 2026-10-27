@@ -1,0 +1,31 @@
+[package]
+name = "s3m-ui"
+description = "egui user interface for Prometheus S3Manager."
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+s3m-core.workspace = true
+s3m-storage.workspace = true
+s3m-s3.workspace = true
+s3m-update.workspace = true
+tokio-util.workspace = true
+eframe.workspace = true
+egui.workspace = true
+egui_extras.workspace = true
+image.workspace = true
+egui-phosphor.workspace = true
+rfd.workspace = true
+serde.workspace = true
+ron.workspace = true
+uuid.workspace = true
+chrono.workspace = true
+tokio.workspace = true
+tracing.workspace = true
+
+[lints]
+workspace = true

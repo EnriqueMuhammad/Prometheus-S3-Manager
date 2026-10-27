@@ -1,0 +1,26 @@
+[package]
+name = "s3m-update"
+description = "Auto-update for Prometheus S3Manager: GitHub Releases check, verified MSI download, hand-over to Windows Installer."
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+s3m-core.workspace = true
+s3m-s3.workspace = true
+reqwest.workspace = true
+ring.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+tokio = { workspace = true, features = ["process"] }
+tokio-util.workspace = true
+tracing.workspace = true
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["test-util", "net"] }
+
+[lints]
+workspace = true

@@ -1,0 +1,33 @@
+[package]
+name = "s3m-core"
+description = "Prometheus S3Manager domain: accounts, endpoint policy, path safety, export format, transfer queue."
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+serde.workspace = true
+serde_json = { workspace = true, features = ["raw_value"] }
+thiserror.workspace = true
+uuid.workspace = true
+chrono.workspace = true
+tokio.workspace = true
+tokio-util = { workspace = true, features = ["rt"] }
+walkdir.workspace = true
+tracing.workspace = true
+fastrand.workspace = true
+ring.workspace = true
+argon2.workspace = true
+semver.workspace = true
+base64.workspace = true
+unicode-normalization.workspace = true
+x509-parser.workspace = true
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["test-util"] }
+
+[lints]
+workspace = true

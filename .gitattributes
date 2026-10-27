@@ -1,0 +1,14 @@
+# Normalize text files in the repository; check out with the platform's line endings.
+* text=auto
+
+# Windows-native files keep CRLF.
+*.ps1 text eol=crlf
+*.wxs text eol=crlf
+
+# Binary assets.
+*.ico binary
+*.png binary
+*.msi binary
+*.exe binary
+*.bmp binary
+*.webp binary

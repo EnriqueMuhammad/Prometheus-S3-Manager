@@ -1,0 +1,43 @@
+{
+  "format": "s3-manager-accounts",
+  "version": 2,
+  "exportedAt": "2026-10-17T03:35:21.3153823\u002B00:00",
+  "accounts": [
+    {
+      "name": "Digital PO S3 (caf\u00E9)",
+      "type": "custom",
+      "endpointHost": "store.example.net:9443",
+      "useTls": true,
+      "region": "us-east-1",
+      "accessKeyId": "AKIAIOSFODNN7EXAMPLE",
+      "forcePathStyle": true,
+      "customCaPem": "",
+      "manualBuckets": [
+        "po-archive",
+        "logs-2026"
+      ],
+      "notes": "Kantor \u003Cpusat\u003E \u0026 \u0022cabang\u0022 \u002B caf\u00E9 \uD83D\uDE80\nline2"
+    },
+    {
+      "name": "AWS default",
+      "type": "aws",
+      "endpointHost": "s3.amazonaws.com",
+      "useTls": true,
+      "region": "us-east-1",
+      "accessKeyId": "AKIAIOSFODNN7EXAMPLE",
+      "forcePathStyle": false,
+      "customCaPem": "",
+      "manualBuckets": [],
+      "notes": ""
+    }
+  ],
+  "secrets": {
+    "kdf": "pbkdf2-sha256",
+    "iterations": 600000,
+    "cipher": "aes-256-gcm",
+    "salt": "fpfhonakkEyA1ITkn44GSw==",
+    "iv": "v8u2T8HlgI6P7T7n",
+    "tag": "UFhIQGcdNU1Y1qHzWUSJaw==",
+    "data": "qdN\u002B8Sf4ZI1d8dMt4k1dkrDxldD\u002B1R2pCkwR1aok6riMlxozjNCRvdG2UhpSrT3sfJSJpYdR"
+  }
+}
