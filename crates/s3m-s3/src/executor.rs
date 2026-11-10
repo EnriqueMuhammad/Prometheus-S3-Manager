@@ -1,6 +1,8 @@
 //! One attempt of an upload, download, copy or move, resumable where S3 allows it.
 //!
-//! - Uploads stream from disk (multipart above [`PART_SIZE`], four parts in flight); under a
+//! - Uploads stream from disk (multipart above [`PART_SIZE`], four parts in flight, parts grown
+//!   by [`part_size`] so a file never needs more than 10,000 of them) with a `Content-Type`
+//!   guessed from the key's extension; under a
 //!   bandwidth limit parts go one at a time, read into memory and released in small chunks. The
 //!   upload id is checkpointed; Resume asks the server which parts it already has (ListParts) and
 //!   sends only the rest, provided the local file still has the same size and modification time.
@@ -36,9 +38,28 @@ use crate::error::StorageError;
 use crate::limit::RateLimiter;
 use crate::throttle;
 
-/// Multipart part size; files up to this size are sent with a single PUT.
+/// Smallest multipart part size; files up to this size are sent with a single PUT.
 pub const PART_SIZE: u64 = 8 * 1024 * 1024;
 const PARTS_IN_FLIGHT: usize = 4;
+/// Most parts S3 accepts in one multipart upload.
+const MAX_PARTS: u64 = 10_000;
+/// Largest object S3 stores (5 TiB).
+pub const MAX_OBJECT_SIZE: u64 = 5 * 1024 * 1024 * 1024 * 1024;
+const MIB: u64 = 1024 * 1024;
+
+/// Part size of a multipart upload of `len` bytes: [`PART_SIZE`], grown in whole MiB when the
+/// file would otherwise need more than 10,000 parts. It depends on `len` only, so a resumed
+/// upload of the same file splits it the same way (files up to about 78 GiB keep 8 MiB parts,
+/// as uploads checkpointed by earlier versions expect).
+pub fn part_size(len: u64) -> Result<u64, TransferError> {
+    if len > MAX_OBJECT_SIZE {
+        return Err(TransferError::permanent(format!(
+            "The file is {}; S3 stores objects up to 5 TiB.",
+            s3m_core::format::size(len)
+        )));
+    }
+    Ok(PART_SIZE.max(len.div_ceil(MAX_PARTS).div_ceil(MIB) * MIB))
+}
 
 /// Runs transfers against S3.
 pub struct S3TransferExecutor {
@@ -312,6 +333,7 @@ async fn copy_between_accounts(io: &Io<'_>, source_client: &Client) -> Result<()
         .unwrap_or(0);
     let content_type = response.content_type().map(str::to_owned);
     let metadata = response.metadata().cloned();
+    let part = part_size(total)?;
     (io.progress)(0, total);
     let mut body = response.body;
 
@@ -358,7 +380,7 @@ async fn copy_between_accounts(io: &Io<'_>, source_client: &Client) -> Result<()
         };
         (io.checkpoint)(serde_json::to_string(&resume).ok());
         let mut parts = Vec::new();
-        let mut buffer: Vec<u8> = Vec::with_capacity(usize::try_from(PART_SIZE).unwrap_or(0));
+        let mut buffer: Vec<u8> = Vec::with_capacity(usize::try_from(part).unwrap_or(0));
         let mut done = 0u64;
         let mut number = 1i32;
         loop {
@@ -371,10 +393,10 @@ async fn copy_between_accounts(io: &Io<'_>, source_client: &Client) -> Result<()
                 io.limiter.acquire(chunk.len() as u64).await;
                 buffer.extend_from_slice(&chunk);
             }
-            while buffer.len() as u64 >= PART_SIZE || (finished && !buffer.is_empty()) {
+            while buffer.len() as u64 >= part || (finished && !buffer.is_empty()) {
                 let take = buffer
                     .len()
-                    .min(usize::try_from(PART_SIZE).unwrap_or(usize::MAX));
+                    .min(usize::try_from(part).unwrap_or(usize::MAX));
                 let part: Vec<u8> = buffer.drain(..take).collect();
                 let size = part.len() as u64;
                 let r = io
@@ -526,6 +548,8 @@ async fn upload(io: &Io<'_>) -> Result<(), TransferError> {
     })?;
     let len = meta.len();
     let mtime = mtime_secs(&meta);
+    let part = part_size(len)?;
+    let content_type = s3m_core::content_type::guess(&job.key).map(str::to_owned);
     (io.progress)(0, len);
 
     // Bytes of throttled bodies on the wire, for progress within a part.
@@ -540,6 +564,7 @@ async fn upload(io: &Io<'_>) -> Result<(), TransferError> {
             .put_object()
             .bucket(&job.bucket)
             .key(&job.key)
+            .set_content_type(content_type)
             .body(body)
             .send();
         tokio::pin!(send);
@@ -581,6 +606,7 @@ async fn upload(io: &Io<'_>) -> Result<(), TransferError> {
                 .create_multipart_upload()
                 .bucket(&job.bucket)
                 .key(&job.key)
+                .set_content_type(content_type)
                 .send()
                 .await
                 .map_err(sdk)?;
@@ -598,8 +624,8 @@ async fn upload(io: &Io<'_>) -> Result<(), TransferError> {
         }
     };
 
-    let part_count = len.div_ceil(PART_SIZE);
-    let expected = |index: u64| PART_SIZE.min(len - index * PART_SIZE);
+    let part_count = len.div_ceil(part);
+    let expected = |index: u64| part.min(len - index * part);
     let mut parts: Vec<CompletedPart> = Vec::new();
     let mut todo = Vec::new();
     let mut done = 0u64;
@@ -635,7 +661,7 @@ async fn upload(io: &Io<'_>) -> Result<(), TransferError> {
             let streamed = &streamed;
             async move {
                 let size = expected(index);
-                let body = part_body(io, streamed, index * PART_SIZE, size).await?;
+                let body = part_body(io, streamed, index * part, size).await?;
                 let r = io
                     .client
                     .upload_part()
@@ -819,6 +845,28 @@ fn publish_no_clobber(temp: &Path, target: &Path) -> Result<(), TransferError> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn part_size_keeps_under_ten_thousand_parts() {
+        let gib = 1024 * MIB;
+        // Up to 10,000 parts of 8 MiB the size stays at 8 MiB (earlier checkpoints match).
+        assert_eq!(part_size(0).expect("empty"), PART_SIZE);
+        assert_eq!(
+            part_size(MAX_PARTS * PART_SIZE).expect("max at 8 MiB"),
+            PART_SIZE
+        );
+        assert_eq!(
+            part_size(MAX_PARTS * PART_SIZE + 1).expect("just over"),
+            PART_SIZE + MIB
+        );
+        for len in [100 * gib, 1024 * gib, MAX_OBJECT_SIZE - 1, MAX_OBJECT_SIZE] {
+            let part = part_size(len).expect("allowed");
+            assert_eq!(part % MIB, 0);
+            assert!(len.div_ceil(part) <= MAX_PARTS, "{len}: {part}");
+            assert!(part <= 5 * gib);
+        }
+        assert!(part_size(MAX_OBJECT_SIZE + 1).is_err());
+    }
 
     #[test]
     fn publish_never_overwrites() {

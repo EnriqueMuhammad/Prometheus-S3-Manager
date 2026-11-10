@@ -19,7 +19,7 @@ mod throttle;
 pub use admin::AclTarget;
 pub use client::ClientProvider;
 pub use error::{StorageError, StorageErrorKind};
-pub use executor::{PART_SIZE, S3TransferExecutor};
+pub use executor::{MAX_OBJECT_SIZE, PART_SIZE, S3TransferExecutor, part_size};
 pub use limit::RateLimiter;
 pub use ops::{MAX_PRESIGN, MAX_SINGLE_COPY, PreviewData};
 pub use proxy::{ProxySettings, system_proxy, validate_proxy_url};

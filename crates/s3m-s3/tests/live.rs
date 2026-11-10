@@ -132,7 +132,7 @@ async fn browse_transfer_rename_delete() {
         .map(|i| (i.wrapping_mul(31) % 253) as u8)
         .collect();
     std::fs::write(src.join("small.txt"), &small).expect("write");
-    std::fs::write(src.join("large.bin"), &large).expect("write");
+    std::fs::write(src.join("large.mp4"), &large).expect("write");
 
     let executor = Arc::new(S3TransferExecutor::new(
         env.accounts.clone(),
@@ -180,16 +180,24 @@ async fn browse_transfer_rename_delete() {
     assert_eq!(
         sizes,
         vec![
-            ("large.bin".into(), large.len() as u64),
+            ("large.mp4".into(), large.len() as u64),
             ("small.txt".into(), small.len() as u64)
         ]
     );
     let details = env
         .storage
-        .object_details(&env.account, &bucket, &format!("{prefix}large.bin"))
+        .object_details(&env.account, &bucket, &format!("{prefix}large.mp4"))
         .await
         .expect("head");
     assert_eq!(details.size, large.len() as u64);
+    // Content-Type guessed from the extension, on the multipart and the single-PUT path.
+    assert_eq!(details.content_type.as_deref(), Some("video/mp4"));
+    let small_details = env
+        .storage
+        .object_details(&env.account, &bucket, &format!("{prefix}small.txt"))
+        .await
+        .expect("head small");
+    assert_eq!(small_details.content_type.as_deref(), Some("text/plain"));
 
     // Downloads, then a second download that must not overwrite.
     let dst = temp_dir("dst");
@@ -220,7 +228,7 @@ async fn browse_transfer_rename_delete() {
         );
     }
     assert_eq!(std::fs::read(dst.join("small.txt")).expect("small"), small);
-    assert_eq!(std::fs::read(dst.join("large.bin")).expect("large"), large);
+    assert_eq!(std::fs::read(dst.join("large.mp4")).expect("large"), large);
     queue.clear_finished();
     queue.enqueue(downloads);
     settle(&queue).await;

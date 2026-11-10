@@ -8,6 +8,7 @@ pub mod admin;
 pub mod browse;
 pub mod bucket;
 pub mod ca;
+pub mod content_type;
 pub mod endpoint;
 pub mod export;
 pub mod format;

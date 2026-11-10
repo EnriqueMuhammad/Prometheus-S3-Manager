@@ -13,6 +13,15 @@ All notable changes to Prometheus S3Manager. The format follows
   Accounts whose keys are encrypted in the file are listed as not imported. Import files may be
   UTF-8 or UTF-16.
 
+### Fixed
+
+- **Content type of uploads**: uploaded files get a `Content-Type` from their extension (images,
+  PDF, HTML, video, Office documents, ...), so presigned URLs and static websites show them in
+  the browser instead of downloading them. Unknown extensions keep the server's default.
+- **Very large files**: uploads and copies between accounts above about 78 GiB no longer fail
+  at the 10,000-part limit; the part size grows with the file (up to the 5 TiB S3 maximum, which
+  is now reported before the upload starts).
+
 ## 0.1.0 - Unreleased
 
 First release.
