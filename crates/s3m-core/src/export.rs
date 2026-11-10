@@ -127,6 +127,8 @@ pub struct ImportPreview {
     pub has_encrypted_secrets: bool,
     /// A v1 file carried secrets this version cannot decrypt.
     pub secrets_unsupported: bool,
+    /// Accounts left out, as `name: reason` (encrypted keys in an XML account export).
+    pub skipped: Vec<String>,
 }
 
 /// Serialises accounts; with a password, their secrets are encrypted into the file.
@@ -181,6 +183,21 @@ pub fn export(
     serde_json::to_string_pretty(&file).map_err(|e| err(e.to_string()))
 }
 
+/// Text of an import file: UTF-8 (with or without a byte order mark) or UTF-16 with a byte
+/// order mark, as Windows tools often write XML.
+pub fn decode_file(bytes: &[u8]) -> Result<String, ExportError> {
+    let utf16 = |rest: &[u8], unit: fn([u8; 2]) -> u16| {
+        let units: Vec<u16> = rest.as_chunks::<2>().0.iter().map(|&c| unit(c)).collect();
+        String::from_utf16(&units).map_err(|_| err("Import file is not valid UTF-16 text."))
+    };
+    match bytes {
+        [0xFF, 0xFE, rest @ ..] => utf16(rest, u16::from_le_bytes),
+        [0xFE, 0xFF, rest @ ..] => utf16(rest, u16::from_be_bytes),
+        [0xEF, 0xBB, 0xBF, rest @ ..] | rest => String::from_utf8(rest.to_vec())
+            .map_err(|_| err("Import file is not UTF-8 or UTF-16 text.")),
+    }
+}
+
 /// Whether the text is a v2 export with encrypted secrets (asks for a password first).
 pub fn has_encrypted_secrets(text: &str) -> bool {
     serde_json::from_str::<Value>(text)
@@ -191,6 +208,9 @@ pub fn has_encrypted_secrets(text: &str) -> bool {
 pub fn read(text: &str, password: Option<&str>) -> Result<ImportPreview, ExportError> {
     if text.len() > MAX_FILE_BYTES {
         return Err(err("Import file is too large."));
+    }
+    if crate::xml_accounts::looks_like_xml(text) {
+        return crate::xml_accounts::read(text);
     }
     let root: Value =
         serde_json::from_str(text).map_err(|_| err("Import file is not valid JSON."))?;
@@ -276,6 +296,7 @@ fn read_v2(text: &str, password: Option<&str>) -> Result<ImportPreview, ExportEr
         accounts,
         has_encrypted_secrets: file.secrets.is_some(),
         secrets_unsupported: false,
+        skipped: Vec::new(),
     })
 }
 
@@ -330,6 +351,7 @@ fn read_v1(root: &Value) -> Result<ImportPreview, ExportError> {
         accounts,
         has_encrypted_secrets: false,
         secrets_unsupported: root.get("secrets").is_some_and(|v| !v.is_null()),
+        skipped: Vec::new(),
     })
 }
 
@@ -540,6 +562,28 @@ mod tests {
         assert!(export(&[account("A")], |_| None, Some("short")).is_err());
         assert!(read("{}", None).unwrap_err().0.contains("Not a Prometheus"));
         assert!(read("nope", None).unwrap_err().0.contains("not valid JSON"));
+    }
+
+    #[test]
+    fn decodes_utf8_and_utf16_files() {
+        let text = "<Export>café</Export>";
+        assert_eq!(decode_file(text.as_bytes()).expect("utf-8"), text);
+        let bom: Vec<u8> = [0xEF, 0xBB, 0xBF].into_iter().chain(text.bytes()).collect();
+        assert_eq!(decode_file(&bom).expect("utf-8 bom"), text);
+        let le: Vec<u8> = [0xFF, 0xFE]
+            .into_iter()
+            .chain(text.encode_utf16().flat_map(u16::to_le_bytes))
+            .collect();
+        assert_eq!(decode_file(&le).expect("utf-16le"), text);
+        let be: Vec<u8> = [0xFE, 0xFF]
+            .into_iter()
+            .chain(text.encode_utf16().flat_map(u16::to_be_bytes))
+            .collect();
+        assert_eq!(decode_file(&be).expect("utf-16be"), text);
+        assert!(decode_file(&[0xC3, 0x28]).is_err());
+        // An XML export goes through the same entry point as JSON exports.
+        let xml = "<Export><Account><Name>n</Name><AccessKey>K123</AccessKey><Endpoint>h.example.net</Endpoint></Account></Export>";
+        assert_eq!(read(xml, None).expect("xml").accounts.len(), 1);
     }
 
     #[test]

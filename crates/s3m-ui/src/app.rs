@@ -1398,7 +1398,9 @@ impl App {
     fn import_accounts(&mut self) {
         let Some(path) = rfd::FileDialog::new()
             .set_title("Import accounts")
+            .add_filter("Account files", &["json", "xml"])
             .add_filter("Prometheus S3Manager accounts", &["json"])
+            .add_filter("XML account export", &["xml"])
             .pick_file()
         else {
             return;
@@ -1408,7 +1410,10 @@ impl App {
                 self.show_error("Import accounts", "Import file is too large.");
                 return;
             }
-            _ => match std::fs::read_to_string(&path) {
+            _ => match std::fs::read(&path)
+                .map_err(|e| e.to_string())
+                .and_then(|bytes| export::decode_file(&bytes).map_err(|e| e.to_string()))
+            {
                 Ok(t) => t.trim_start_matches('\u{feff}').to_owned(),
                 Err(e) => {
                     self.show_error("Import accounts", e.to_string());
@@ -1434,26 +1439,61 @@ impl App {
     fn preview_import(&mut self, text: &str, password: Option<&str>) {
         match export::read(text, password) {
             Ok(preview) => {
+                let skipped: Vec<String> = preview
+                    .skipped
+                    .iter()
+                    .take(15)
+                    .map(|s| format!("• {s}"))
+                    .collect();
+                if preview.accounts.is_empty() {
+                    self.show_error(
+                        "Import accounts",
+                        format!(
+                            "No account in this file can be imported.\n\n{}",
+                            skipped.join("\n")
+                        ),
+                    );
+                    return;
+                }
                 let names: Vec<String> = preview
                     .accounts
                     .iter()
                     .take(15)
                     .map(|a| format!("• {} ({})", a.name, a.endpoint_host))
                     .collect();
+                let without_secret = preview
+                    .accounts
+                    .iter()
+                    .filter(|a| a.secret_access_key.is_none())
+                    .count();
                 let mut note = String::new();
-                if !preview.has_encrypted_secrets {
+                if without_secret == preview.accounts.len() {
                     note.push_str(" Secret keys were not included; edit each account to add them.");
+                } else if without_secret > 0 {
+                    note.push_str(&format!(
+                        " {without_secret} account(s) have no secret key; edit them to add it."
+                    ));
                 }
                 if preview.secrets_unsupported {
                     note.push_str(" (Secrets in version 1 export files cannot be read here.)");
                 }
+                if !preview.skipped.is_empty() {
+                    note.push_str(&format!(
+                        " {} account(s) in the file were not imported.",
+                        preview.skipped.len()
+                    ));
+                }
+                let mut body = format!(
+                    "Add {} account(s)? Existing accounts are not changed.\n\n{}",
+                    preview.accounts.len(),
+                    names.join("\n")
+                );
+                if !skipped.is_empty() {
+                    body.push_str(&format!("\n\nNot imported:\n{}", skipped.join("\n")));
+                }
                 self.modal = Some(Modal::Confirm {
                     title: "Import accounts".into(),
-                    body: format!(
-                        "Add {} account(s)? Existing accounts are not changed.\n\n{}",
-                        preview.accounts.len(),
-                        names.join("\n")
-                    ),
+                    body,
                     ok: "Import".into(),
                     alternative: None,
                     action: ConfirmAction::Import { preview, note },

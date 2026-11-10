@@ -4,6 +4,15 @@ All notable changes to Prometheus S3Manager. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses
 [Semantic Versioning](https://semver.org/).
 
+## Unreleased
+
+### Added
+
+- **Import from XML account exports**: Accounts > Import accounts... also reads `.xml` files
+  with an `<Export>` of `<Account>` entries (name, endpoint, SSL, region and plain-text keys).
+  Accounts whose keys are encrypted in the file are listed as not imported. Import files may be
+  UTF-8 or UTF-16.
+
 ## 0.1.0 - Unreleased
 
 First release.

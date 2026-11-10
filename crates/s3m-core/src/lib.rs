@@ -21,6 +21,7 @@ pub mod transfer;
 pub mod update;
 pub mod uploads;
 pub mod vault;
+pub mod xml_accounts;
 
 pub use account::{
     Account, AccountDraft, AccountError, AccountRepository, AccountService, AccountType,

@@ -11,8 +11,8 @@ buckets and files are not real.
 ## Features
 
 - **Accounts**: any number of accounts and keys, folders, provider presets, test connection,
-  import/export with a password. Secret keys are stored in the Windows Credential Manager, optionally
-  protected by a master password.
+  import/export with a password, and import from XML account exports. Secret keys are stored in
+  the Windows Credential Manager, optionally protected by a master password.
 - **Secure connections**: TLS with the Windows certificate store (company CAs work) and an optional
   custom CA per account. Plain HTTP only for private-network addresses.
 - **Files**: browse, filter and sort; upload files and folders (drag and drop from Explorer),

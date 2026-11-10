@@ -4008,6 +4008,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "roxmltree"
+version = "0.20.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6c20b6793b5c2fa6553b250154b78d6d0db37e72700ae35fad9387a46f487c97"
+
+[[package]]
 name = "rsqlite-vfs"
 version = "0.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4156,6 +4162,7 @@ dependencies = [
  "chrono",
  "fastrand",
  "ring",
+ "roxmltree",
  "semver",
  "serde",
  "serde_json",
